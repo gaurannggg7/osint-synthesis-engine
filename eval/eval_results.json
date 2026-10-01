@@ -1,0 +1,201 @@
+{
+  "summary": {
+    "n_queries": 17,
+    "mean_vector_recall_at_10": 0.471,
+    "mean_bm25_recall_at_10": 0.412,
+    "mean_hybrid_recall_at_10": 0.529,
+    "vector_minus_bm25_delta": 0.059
+  },
+  "per_query": [
+    {
+      "id": "g01",
+      "query": "sanctioned oil tanker linked to National Iranian Tanker company",
+      "query_type": "exact",
+      "relevant_doc_ids": [
+        "ofac-sdn-15093"
+      ],
+      "vector_recall": 0.0,
+      "bm25_recall": 0.0,
+      "hybrid_recall": 0.0
+    },
+    {
+      "id": "g02",
+      "query": "vessel sanctioned under North Korea DPRK sanctions program",
+      "query_type": "exact",
+      "relevant_doc_ids": [
+        "ofac-sdn-23738"
+      ],
+      "vector_recall": 0.0,
+      "bm25_recall": 0.0,
+      "hybrid_recall": 0.0
+    },
+    {
+      "id": "g03",
+      "query": "aircraft linked to Venezuelan aeronautics industry sanctions",
+      "query_type": "exact",
+      "relevant_doc_ids": [
+        "ofac-sdn-28389"
+      ],
+      "vector_recall": 0.0,
+      "bm25_recall": 0.0,
+      "hybrid_recall": 0.0
+    },
+    {
+      "id": "g04",
+      "query": "tug boat linked to Petroleos de Venezuela state oil company",
+      "query_type": "exact",
+      "relevant_doc_ids": [
+        "ofac-sdn-26651"
+      ],
+      "vector_recall": 1.0,
+      "bm25_recall": 0.0,
+      "hybrid_recall": 1.0
+    },
+    {
+      "id": "g05",
+      "query": "chemical oil tanker sanctioned under Iran executive order 13902",
+      "query_type": "exact",
+      "relevant_doc_ids": [
+        "ofac-sdn-53890",
+        "ofac-sdn-51572"
+      ],
+      "vector_recall": 0.0,
+      "bm25_recall": 0.0,
+      "hybrid_recall": 0.0
+    },
+    {
+      "id": "g06",
+      "query": "which sanctioned ships are connected to Iranian state petroleum shipping",
+      "query_type": "semantic",
+      "relevant_doc_ids": [
+        "ofac-sdn-15093",
+        "ofac-sdn-51572",
+        "ofac-sdn-53890"
+      ],
+      "vector_recall": 0.0,
+      "bm25_recall": 0.0,
+      "hybrid_recall": 0.0
+    },
+    {
+      "id": "g07",
+      "query": "commercial aircraft operated by Iran Air under sanctions",
+      "query_type": "exact",
+      "relevant_doc_ids": [
+        "ofac-sdn-25552"
+      ],
+      "vector_recall": 0.0,
+      "bm25_recall": 0.0,
+      "hybrid_recall": 0.0
+    },
+    {
+      "id": "g08",
+      "query": "digital asset exchange annual report filed with SEC",
+      "query_type": "semantic",
+      "relevant_doc_ids": [
+        "sec-edgar-0001213900-26-060125:ea0290209-20f_inxltd.htm"
+      ],
+      "vector_recall": 1.0,
+      "bm25_recall": 0.0,
+      "hybrid_recall": 1.0
+    },
+    {
+      "id": "g09",
+      "query": "Robinhood Markets 10-K annual report",
+      "query_type": "exact",
+      "relevant_doc_ids": [
+        "sec-edgar-0001783879-24-000054:hood-20231231.htm"
+      ],
+      "vector_recall": 0.0,
+      "bm25_recall": 0.0,
+      "hybrid_recall": 0.0
+    },
+    {
+      "id": "g10",
+      "query": "cryptocurrency-focused bank holding company annual report",
+      "query_type": "semantic",
+      "relevant_doc_ids": [
+        "sec-edgar-0001312109-22-000051:si-20211231.htm"
+      ],
+      "vector_recall": 0.0,
+      "bm25_recall": 0.0,
+      "hybrid_recall": 0.0
+    },
+    {
+      "id": "g11",
+      "query": "Bitcoin ETF trust S-1 registration statement",
+      "query_type": "exact",
+      "relevant_doc_ids": [
+        "sec-edgar-0001493152-19-005505:forms-1a.htm"
+      ],
+      "vector_recall": 1.0,
+      "bm25_recall": 1.0,
+      "hybrid_recall": 1.0
+    },
+    {
+      "id": "g12",
+      "query": "Bitcoin custodian anti-money laundering and sanctions compliance program",
+      "query_type": "exact",
+      "relevant_doc_ids": [
+        "sec-edgar-0001193125-23-294476:filename1.htm"
+      ],
+      "vector_recall": 1.0,
+      "bm25_recall": 1.0,
+      "hybrid_recall": 1.0
+    },
+    {
+      "id": "g13",
+      "query": "bank willfully violated anti-money laundering program requirements",
+      "query_type": "exact",
+      "relevant_doc_ids": [
+        "sec-edgar-0000891836-04-000358:ex_99-4.htm"
+      ],
+      "vector_recall": 1.0,
+      "bm25_recall": 1.0,
+      "hybrid_recall": 1.0
+    },
+    {
+      "id": "g14",
+      "query": "Department of Justice AML compliance concerns at a financial institution",
+      "query_type": "semantic",
+      "relevant_doc_ids": [
+        "sec-edgar-0001104659-07-059276:a07-21089_28k.htm"
+      ],
+      "vector_recall": 1.0,
+      "bm25_recall": 1.0,
+      "hybrid_recall": 1.0
+    },
+    {
+      "id": "g15",
+      "query": "civil forfeiture of virtual currency accounts linked to illicit activity",
+      "query_type": "exact",
+      "relevant_doc_ids": [
+        "courtlistener-9481353"
+      ],
+      "vector_recall": 1.0,
+      "bm25_recall": 1.0,
+      "hybrid_recall": 1.0
+    },
+    {
+      "id": "g16",
+      "query": "government seizure action against virtual currency assets",
+      "query_type": "semantic",
+      "relevant_doc_ids": [
+        "courtlistener-4872437"
+      ],
+      "vector_recall": 1.0,
+      "bm25_recall": 1.0,
+      "hybrid_recall": 1.0
+    },
+    {
+      "id": "g17",
+      "query": "federal forfeiture case involving stablecoin USDT",
+      "query_type": "exact",
+      "relevant_doc_ids": [
+        "courtlistener-10965051"
+      ],
+      "vector_recall": 0.0,
+      "bm25_recall": 1.0,
+      "hybrid_recall": 1.0
+    }
+  ]
+}

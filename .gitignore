@@ -1,0 +1,23 @@
+.env
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Virtual environments and Python cache
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# macOS
+.DS_Store
+
+# Generated logs
+logs/
+*.log
+
+# Generated datasets and vector database
+data/processed/
+vectorstore/chroma_db/
