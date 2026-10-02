@@ -33,7 +33,8 @@ from pathlib import Path
 
 import requests
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+from config import Settings, require_contact_user_agent
+
 log = logging.getLogger("ofac_sdn")
 
 BASE_URL = "https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports"
@@ -42,10 +43,13 @@ FILES = {
     "addresses": f"{BASE_URL}/ADD.CSV",
     "aliases": f"{BASE_URL}/ALT.CSV",
 }
-# Required or OFAC's host 403s the request -- documented by OFAC itself.
-HEADERS = {
-    "User-Agent": "OSINT-Research-Pipeline/1.0 (contact: PUT_YOUR_REAL_EMAIL_HERE)"
-}
+
+
+def _headers(settings: Settings | None = None) -> dict:
+    # A User-Agent is required or OFAC's host 403s the request (documented by OFAC).
+    ua = require_contact_user_agent(settings or Settings.from_env())
+    return {"User-Agent": f"OSINT-Research-Pipeline/1.0 ({ua})"}
+
 
 # SDN.CSV has no header row. Column order per OFAC's SDN data specification.
 SDN_COLUMNS = [
@@ -74,7 +78,7 @@ class NormalizedDoc:
 
 
 def _fetch_csv(url: str, columns: list) -> list[dict]:
-    resp = requests.get(url, headers=HEADERS, timeout=60)
+    resp = requests.get(url, headers=_headers(), timeout=60)
     resp.raise_for_status()
     reader = csv.reader(io.StringIO(resp.text))
     rows = []
@@ -102,6 +106,13 @@ def fetch_all():
     return primary, addresses, aliases
 
 
+def clean_field(v) -> str:
+    """OFAC uses the literal string "-0-" as a null placeholder. Left in
+    place it pollutes document text (and embeddings) with fake content."""
+    v = (v or "").strip()
+    return "" if v == "-0-" else v
+
+
 def normalize(primary, addresses, aliases):
     addr_by_ent, alias_by_ent = {}, {}
     for a in addresses:
@@ -118,50 +129,34 @@ def normalize(primary, addresses, aliases):
             excluded_individuals += 1
             continue  # GUARDRAIL: drop individuals here, not downstream
 
-        # ent = row["ent_num"]
-        # addr_txt = "; ".join(
-        #     f"{a['address']}, {a['city_state_prov_postal']}, {a['country']}".strip(", ")
-        #     for a in addr_by_ent.get(ent, [])
-        # )
-        # alias_txt = "; ".join(a["alt_name"] for a in alias_by_ent.get(ent, []) if a["alt_name"])
-                # OFAC uses the literal string "-0-" as a null/blank placeholder in
-        # its CSVs. Left in place, it pollutes document text with fake
-        # "content" (e.g. "Address(es): -0- , -0- , -0-") that would add
-        # noise to embeddings later. Stripped here, at cleaning time, not
-        # left for the retrieval stage to somehow learn to ignore.
-        def _clean_field(v: str) -> str:
-            v = (v or "").strip()
-            return "" if v in ("-0-", "") else v
-
         ent = row["ent_num"]
-        addr_txt_parts = []
-        for a in addr_by_ent.get(ent, []):
-            parts = [_clean_field(a["address"]), _clean_field(a["city_state_prov_postal"]), _clean_field(a["country"])]
-            joined = ", ".join(p for p in parts if p)
-            if joined:
-                addr_txt_parts.append(joined)
-        addr_txt = "; ".join(addr_txt_parts)
-
-        alias_txt = "; ".join(
-            _clean_field(a["alt_name"]) for a in alias_by_ent.get(ent, []) if _clean_field(a["alt_name"])
+        addr_txt = "; ".join(
+            joined for joined in (
+                ", ".join(p for p in (clean_field(a["address"]),
+                                      clean_field(a["city_state_prov_postal"]),
+                                      clean_field(a["country"])) if p)
+                for a in addr_by_ent.get(ent, [])
+            ) if joined
         )
-
-
+        alias_txt = "; ".join(
+            clean_field(a["alt_name"]) for a in alias_by_ent.get(ent, []) if clean_field(a["alt_name"])
+        )
 
         text_parts = [
             f"Name: {row['sdn_name']}",
             f"Type: {sdn_type_raw}",
             f"Program(s): {row['program']}",
         ]
-        if row.get("vess_type"):
-            text_parts.append(f"Vessel type: {row['vess_type']}, flag: {row.get('vess_flag','')}")
+        vess_type, vess_flag = clean_field(row.get("vess_type")), clean_field(row.get("vess_flag"))
+        vessel_bits = ([f"Vessel type: {vess_type}"] if vess_type else []) + \
+                      ([f"flag: {vess_flag}"] if vess_flag else [])
+        if vessel_bits:
+            text_parts.append(", ".join(vessel_bits))
         if alias_txt:
             text_parts.append(f"Also known as: {alias_txt}")
         if addr_txt:
             text_parts.append(f"Address(es): {addr_txt}")
-        # if row.get("remarks"):
-        #     text_parts.append(f"Remarks: {row['remarks']}")
-        remarks_clean = _clean_field(row.get("remarks"))
+        remarks_clean = clean_field(row.get("remarks"))
         if remarks_clean:
             text_parts.append(f"Remarks: {remarks_clean}")
 
@@ -204,5 +199,6 @@ def run(out_dir: str = "data/processed"):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     stats = run()
     print(json.dumps(stats, indent=2))

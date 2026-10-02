@@ -25,32 +25,25 @@ businesses) -- never a named private individual.
 """
 import json
 import logging
-import os
 import time
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
-from dotenv import load_dotenv
+from config import Settings, require_contact_user_agent
 
-load_dotenv()
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("sec_edgar")
 
 SEARCH_URL = "https://efts.sec.gov/LATEST/search-index"
 ARCHIVE_BASE = "https://www.sec.gov/Archives/edgar/data"
 
-_contact_ua = os.environ.get("CONTACT_USER_AGENT")
-if not _contact_ua:
-    raise RuntimeError(
-        "CONTACT_USER_AGENT not set. Create a .env file in the project "
-        "root with: CONTACT_USER_AGENT=Your Name your.email@example.com "
-        "-- SEC's Archives host blocks requests without a real-looking "
-        "contact identity in the User-Agent (confirmed by direct testing)."
-    )
-HEADERS = {"User-Agent": _contact_ua, "Accept": "application/json"}
+
+
+def _headers() -> dict:
+    return {"User-Agent": require_contact_user_agent(Settings.from_env()),
+            "Accept": "application/json"}
+
 
 ENTITY_CATEGORY_QUERIES = [
     {"q": "\"virtual currency exchange\" enforcement", "forms": ""},
@@ -88,7 +81,7 @@ def search(query: dict, max_pages: int = 1) -> list[dict]:
 
         resp = None
         for attempt in range(MAX_RETRIES + 1):
-            resp = requests.get(SEARCH_URL, headers=HEADERS, params=params, timeout=30)
+            resp = requests.get(SEARCH_URL, headers=_headers(), params=params, timeout=30)
             if resp.status_code == 200:
                 break
             log.warning("Query %r page %d got %d (attempt %d/%d): %s",
@@ -108,23 +101,27 @@ def search(query: dict, max_pages: int = 1) -> list[dict]:
     return hits
 
 
+def filing_url(hit: dict) -> str | None:
+    """Direct URL of the filing document (what a reader should be linked to),
+    built from the hit's _id ("{accession-with-dashes}:{filename}") and CIK."""
+    _id = hit.get("_id", "")
+    ciks = hit.get("_source", {}).get("ciks", [])
+    if ":" not in _id or not ciks:
+        return None
+    adsh_dashed, filename = _id.split(":", 1)
+    return f"{ARCHIVE_BASE}/{ciks[0].lstrip('0') or '0'}/{adsh_dashed.replace('-', '')}/{filename}"
+
+
 def fetch_filing_text(hit: dict, max_chars: int = 20000) -> str:
     """Fetch the actual filing document body. The search-index response has
     NO body/excerpt field (verified against a real hit) -- _id is
     "{accession_no_dashes}:{filename}", which is what we need to build the
     real Archives URL and pull real text."""
-    _id = hit.get("_id", "")
-    if ":" not in _id:
+    url = filing_url(hit)
+    if not url:
         return ""
-    adsh_dashed, filename = _id.split(":", 1)
-    adsh_nodash = adsh_dashed.replace("-", "")
-    ciks = hit.get("_source", {}).get("ciks", [])
-    if not ciks:
-        return ""
-    cik = ciks[0].lstrip("0") or "0"
-    url = f"{ARCHIVE_BASE}/{cik}/{adsh_nodash}/{filename}"
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=30)
+        resp = requests.get(url, headers=_headers(), timeout=30)
         resp.raise_for_status()
         time.sleep(RATE_LIMIT_SECONDS)
         return resp.text[:max_chars]
@@ -154,7 +151,7 @@ def normalize(all_hits: list, fetch_bodies: bool = True) -> list:
                 title=f"{src.get('form','?')} — {', '.join(src.get('display_names', []))}",
                 programs=src.get("root_forms", []),
                 text=body,
-                url=f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}",
+                url=filing_url(hit) or f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}",
                 retrieved_at=now,
             )
         )
@@ -187,5 +184,6 @@ def run(out_dir: str = "data/processed", fetch_bodies: bool = True):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     stats = run()
     print(json.dumps(stats, indent=2))

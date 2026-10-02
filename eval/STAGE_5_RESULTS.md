@@ -1,79 +1,91 @@
-# Stage 5 — Retrieval Evaluation Results
+# Retrieval evaluation results
+
+Reproduce: `python -m eval.run_eval` (needs the full corpus snapshot and index; see
+[README](../README.md#evaluation)). Raw numbers, per-query rows and corpus provenance
+(file hash, document count, vector count) are in [`eval_results.json`](eval_results.json).
 
 ## Method
-17-query golden set, built backwards from real documents already
-confirmed present in the corpus (not written first and hoped to match).
-Each query paired with 1-3 known-relevant doc_ids. Recall@10 measured
-for: pure vector (all-MiniLM-L6-v2 + ChromaDB), pure BM25 keyword
-baseline (rank_bm25, same corpus), and RRF hybrid (Reciprocal Rank
-Fusion, k=60, combining both rankings by rank position rather than
-raw score, since cosine similarity and BM25 scores are not on
-comparable scales).
 
-## Headline numbers
+- 17-query golden set ([`golden_set.json`](golden_set.json)), built backwards from documents
+  already present in the corpus, each paired with 1-3 relevant `doc_id`s.
+- **Recall@10** for three methods over the same corpus:
+  pure vector (all-MiniLM-L6-v2 + ChromaDB, chunks deduplicated to parent documents),
+  BM25 (rank_bm25, whitespace tokenizer, untuned), and Reciprocal Rank Fusion (k=60) of the two.
+- Corpus snapshot: 2,339 documents (1,882 OFAC SDN, 382 SEC EDGAR, 75 CourtListener),
+  8,036 vectors, ingested 2026-09-15 to 2026-09-18.
+- The 2026-10-01 re-run on the preserved index reproduced the original headline numbers exactly.
 
-| Method | Mean Recall@10 (n=17) |
+## Measured results (n = 17)
+
+| Method | Mean recall@10 |
 |---|---|
 | Vector | 0.471 |
-| BM25   | 0.412 |
-| Hybrid (RRF) | 0.529 |
+| BM25 | 0.412 |
+| RRF hybrid | 0.529 |
 
-Hybrid outperforms both individual methods, as expected when combining
-independent signal sources.
+By query group:
 
-## The real finding: source-dependent retrieval failure
+| Group | n | Vector | BM25 | Hybrid |
+|---|---|---|---|---|
+| OFAC SDN | 7 | 0.143 | 0.000 | 0.143 |
+| SEC EDGAR | 7 | 0.714 | 0.571 | 0.714 |
+| CourtListener | 3 | 0.667 | 1.000 | 1.000 |
 
-The aggregate numbers above hide a large, consistent gap that only
-appears when the results are broken down by source:
+**Hybrid vs. the best single method, per query: 0 wins, 17 ties, 0 losses.**
+Hybrid's higher mean than vector alone comes entirely from inheriting BM25's wins
+(for example g17, where BM25 finds the document and vector does not). It never beat the
+better of the two on any query. The earlier statement that hybrid "outperforms both,
+as expected when combining independent signals" is not supported by this data.
 
-| Query group | Vector | BM25 | Hybrid |
-|---|---|---|---|
-| OFAC SDN (n=7) | 0.143 | 0.000 | 0.143 |
-| SEC EDGAR / CourtListener (n=10) | 0.700 | 0.700 | 0.800 |
+## What the OFAC result does and does not show
 
-BM25 recall on OFAC queries was **exactly zero** -- not one OFAC query's
-relevant document appeared anywhere in BM25's top 10, across 7 distinct
-queries. Vector search fared only slightly better (1 of 7).
+OFAC recall is near zero (vector 0.143, BM25 0.000). The earlier write-up attributed this to
+short, field-labelled documents breaking BM25 length normalisation and embeddings. That
+hypothesis was **not** supported when tested:
 
-## Root cause (hypothesis, not yet fixed)
+1. **Label incompleteness dominates.** Each OFAC query has one labelled document, but the corpus
+   holds many equally valid answers: 64 OFAC records are "Linked To: NATIONAL IRANIAN TANKER
+   COMPANY", 40 are linked to the Venezuelan state oil company, 121 mention DPRK programs, 67
+   mention Iran Air. Strict recall@10 against one label is capped by chance for such queries.
+2. **A diagnostic metric agrees.** For the 6 OFAC queries with an attribute rule
+   (`relevant_text_contains`), the share of the top 10 that satisfies the rule is
+   vector 0.667, BM25 0.450, hybrid 0.550. On g01 and g02, both vector and BM25 return ten
+   matching documents and still score 0.0 strict recall. These rules were written after seeing
+   the results, so treat them as a diagnostic, not a pre-registered metric.
+3. **There are genuine misses.** g03 (Venezuelan aeronautics) and g05 (chemical tanker under an
+   Iran executive order) score 0 on attribute precision for vector search too. The query says
+   "Venezuelan aeronautics industry"; the record says "CONSORCIO VENEZOLANO DE INDUSTRIAS
+   AERONAUTICAS". That vocabulary gap is a real, unfixed weakness.
+4. **Tokenization is not the cause.** A regex tokenizer in place of whitespace splitting left BM25
+   OFAC recall at 0.000.
+5. **g01 is a poor label.** Its relevant document is a "Platform Supply Ship", while the query
+   asks for an "oil tanker".
 
-OFAC entries in the corpus are short, terse, field-labeled records
-(e.g. `"Name: VANITY\nProgram(s): IRAN-EO13902\nVessel type: Crude Oil
-Tanker..."`), typically under 50 words, in contrast to SEC/CourtListener
-documents which run to hundreds or thousands of words of natural
-prose. Two plausible, non-exclusive explanations:
+## A cleaning bug found during this review (fixed in code, not re-measured)
 
-1. **BM25 term-frequency dynamics break down on very short documents.**
-   BM25's scoring formula includes a document-length normalization term;
-   behavior on 50-word structured records has not been separately tuned
-   or verified here, and may not behave as expected out of the box.
-2. **Semantic embeddings may encode less useful signal from terse,
-   field-labeled text** than from flowing prose, since the model was
-   trained predominantly on natural language.
+`ingestion/clean_dedupe.py` removed any line shared by more than 30% of a source's documents.
+For OFAC that deleted the `Type: vessel` / `Type: aircraft` line from 1,540 of 1,882 records,
+and `-0-` null placeholders remained in 473. Both are now fixed (OFAC is exempt from the
+repeated-line stripper; `-0-` is cleaned in the vessel fields) with unit tests. **The numbers above
+were measured before the fix** on the original corpus. A BM25-only check that restored the
+missing text did not change OFAC recall (still 0.000), so this bug does not explain the headline
+gap, but the full pipeline (re-clean, re-index, re-evaluate) has not been re-run.
 
-This has NOT been fixed in this stage. Per the project's own standard
-(verify before moving on, flag anything that looks better than it is),
-this is reported as an open, quantified limitation rather than silently
-patched or hidden behind the healthier aggregate number.
+## Limitations of this evaluation
 
-## What is honestly resume-claimable from this stage
+- 17 queries, one author, no held-out set; differences of one or two queries are noise.
+- Golden queries were written from known documents, which favours lexical overlap.
+- Relevance labels are incomplete (see above), so recall understates quality on group-style queries.
+- Near-duplicate documents (61 flagged) stay in the index.
+- Exact reproduction needs the 2026-09 corpus snapshot. Re-running ingestion later returns different
+  data, and the golden set's `doc_id`s may not exist. The run script fails loudly in that case.
+- `demo/golden_set.json` runs the same harness on a 24-document public sample. It is a smoke test of
+  the harness, not a benchmark: with 24 documents, a top-10 list covers a large share of the corpus.
 
-- "Built a 17-query golden evaluation set grounded in real corpus
-  documents, and implemented recall@10 evaluation across vector, BM25,
-  and RRF-hybrid retrieval methods."
-- "Identified and quantified a significant source-dependent retrieval
-  gap (OFAC records: 0.14 recall@10 vs. 0.70-0.80 for prose-based
-  sources), pointing to a specific, named root-cause hypothesis for
-  future improvement work."
+## Not done (candidate next steps)
 
-What is NOT claimable: "high-performing retrieval system" or a single
-headline recall number without this breakdown -- the aggregate 0.47-0.53
-range is real but conceals the OFAC weakness, and citing it alone would
-misrepresent the system's actual behavior.
-
-## Suggested future work (not done, explicitly out of scope for this build)
-- Test OFAC-specific chunking/embedding: e.g. converting terse fields
-  into a fuller natural-language sentence before embedding
-  ("VANITY is a Crude Oil Tanker sanctioned under the Iran-EO13902
-  program...") rather than embedding the raw field-labeled text.
-- Test a smaller BM25 k1/b parameter tuned for short documents.
+- Re-run clean, index and eval after the fix and report the change.
+- Expand relevance labels for group-style queries (or label by attribute) and add more queries.
+- Test rewriting terse OFAC fields into a sentence before embedding; tune BM25 `k1`/`b`.
+- Evaluate answer groundedness (whether report claims are supported by the cited excerpt), which
+  this retrieval evaluation does not cover.

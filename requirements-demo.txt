@@ -1,0 +1,9 @@
+# Minimal dependencies for the PRERECORDED demo backend (DEMO_MODE=prerecorded).
+# Derived from the actual import graph of api/main.py -> agent/graph.py -> config.py:
+# no torch, chromadb, sentence-transformers, langgraph or langchain, because those
+# are imported lazily and only by live mode. For live mode use requirements.txt.
+# Versions match requirements.txt. Developed and tested on Python 3.13.
+fastapi==0.141.1
+uvicorn==0.53.0
+pydantic==2.13.5
+python-dotenv==1.2.3

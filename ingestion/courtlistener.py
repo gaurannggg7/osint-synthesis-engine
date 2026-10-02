@@ -9,30 +9,27 @@ Source: https://www.courtlistener.com/api/rest/v4/search/?q=...&type=o
 """
 import json
 import logging
-import os
 import time
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
-from dotenv import load_dotenv
+from config import Settings, require_contact_user_agent
 
-load_dotenv()
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("courtlistener")
 
 SEARCH_URL = "https://www.courtlistener.com/api/rest/v4/search/"
 
-_contact_ua = os.environ.get("CONTACT_USER_AGENT")
-if not _contact_ua:
-    raise RuntimeError("CONTACT_USER_AGENT not set in .env")
 
-TOKEN = os.environ.get("COURTLISTENER_API_TOKEN", "")
-HEADERS = {"User-Agent": _contact_ua}
-if TOKEN:
-    HEADERS["Authorization"] = f"Token {TOKEN}"
+
+def _headers() -> dict:
+    settings = Settings.from_env()
+    headers = {"User-Agent": require_contact_user_agent(settings)}
+    if settings.courtlistener_token:
+        headers["Authorization"] = f"Token {settings.courtlistener_token}"
+    return headers
+
 
 ENTITY_CATEGORY_QUERIES = [
     "cryptocurrency exchange money laundering forfeiture",
@@ -64,7 +61,7 @@ def search(query: str, max_pages: int = 1) -> list[dict]:
     for _ in range(max_pages):
         resp = None
         for attempt in range(MAX_RETRIES + 1):
-            resp = requests.get(url, headers=HEADERS, params=params, timeout=30)
+            resp = requests.get(url, headers=_headers(), params=params, timeout=30)
             if resp.status_code == 200:
                 break
             log.warning("Query %r got %d (attempt %d/%d): %s",
@@ -160,5 +157,6 @@ def run(out_dir: str = "data/processed"):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     stats = run()
     print(json.dumps(stats, indent=2))

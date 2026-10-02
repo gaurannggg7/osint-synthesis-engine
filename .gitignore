@@ -14,10 +14,15 @@ __pycache__/
 # macOS
 .DS_Store
 
+# Test / tool caches
+.pytest_cache/
+
 # Generated logs
 logs/
 *.log
 
 # Generated datasets and vector database
 data/processed/
+data/raw/
 vectorstore/chroma_db/
+*.sqlite3

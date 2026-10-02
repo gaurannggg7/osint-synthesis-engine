@@ -12,8 +12,15 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+from config import Settings
+
 log = logging.getLogger("clean_dedupe")
+
+# Sources whose documents are short, field-labelled records ("Type: vessel",
+# "Program(s): IRAN"). Their repeated lines ARE the signal, so the
+# repeated-line boilerplate stripper must not touch them. (Before this was
+# added, it deleted the "Type:" line from 1540 of 1882 OFAC documents.)
+STRUCTURED_SOURCES = {"OFAC_SDN"}
 
 WHITESPACE_RUN = re.compile(r"\s{2,}")
 SINGLE_CHAR_LINE = re.compile(r"^\W$")
@@ -57,6 +64,8 @@ def strip_boilerplate(docs: list[dict]) -> list[dict]:
         by_source[d["source"]].append(d)
 
     for source, group in by_source.items():
+        if source in STRUCTURED_SOURCES:
+            continue
         line_counts = Counter()
         for d in group:
             for line in set(d["text"].splitlines()):
@@ -122,15 +131,20 @@ def dedupe(docs: list[dict], jaccard_threshold: float = 0.85) -> list[dict]:
     return docs
 
 
-def run(processed_dir: str = "data/processed"):
-    p = Path(processed_dir)
+def run(processed_dir: str | Path | None = None):
+    p = Path(processed_dir) if processed_dir else Settings.from_env().data_dir
     all_docs = []
     per_file_counts = {}
     for f in p.glob("*_normalized.jsonl"):
-        docs = [json.loads(line) for line in open(f)]
+        with open(f, encoding="utf-8") as fh:
+            docs = [json.loads(line) for line in fh if line.strip()]
         per_file_counts[f.name] = len(docs)
         all_docs.extend(docs)
 
+    if not all_docs:
+        raise FileNotFoundError(
+            f"No *_normalized.jsonl files in {p}. Run the ingestion scripts first "
+            "(python -m ingestion.ofac_sdn / sec_edgar / courtlistener).")
     log.info("Loaded %d raw normalized docs from %d files: %s", len(all_docs), len(per_file_counts), per_file_counts)
 
     n_before = len(all_docs)
@@ -149,12 +163,13 @@ def run(processed_dir: str = "data/processed"):
     log.info("Wrote final cleaned corpus: %d docs -> %s", len(final), out_path)
     return {
         "input_files": per_file_counts,
-        "total_raw": len(all_docs),
+        "total_raw": n_before,
         "final_corpus_size": len(final),
         "out_path": str(out_path),
     }
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     stats = run()
     print(json.dumps(stats, indent=2))
